@@ -3,4 +3,5 @@ linux:
 	./main
 
 win:
+	x86_64-w64-mingw32-gcc -Wall -Wextra -g -o main -lraylib main.c
 	./main
