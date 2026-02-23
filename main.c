@@ -1,10 +1,15 @@
 #include "raylib.h"
 #include <math.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <time.h>
 
 // Constants
-const int PLAYER_SCALE = 4;
-const int PLAYER_IMAGE_NUMBER = 2;
+#define PLAYER_SCALE 4
+#define PLAYER_IMAGE_NUMBER 2
+#define MAX_ENEMY_NUMBER 5
+#define PLAYER_ACCEL 3
+#define PLAYER_
 
 // Core Variables
 int WINDOW_WIDTH = 800;
@@ -32,10 +37,10 @@ void draw_sprite(Sprite sprite) {
   DrawTexture(sprite.texture, s_pos.x - sprite.texture.width / 2.0,
               s_pos.y - sprite.texture.height / 2.0, WHITE);
 }
-void init_sprite(Sprite *sprite, float x, float y, Image image, float accel,
+void init_sprite(Sprite *sprite, Vector2 w_pos, Image image, float accel,
                  float max_speed, float sdf) {
-  *sprite = (Sprite){{x, y}, {0, 0},    LoadTextureFromImage(image),
-                     accel,  max_speed, sdf};
+  *sprite = (Sprite){w_pos, {0, 0},    LoadTextureFromImage(image),
+                     accel, max_speed, sdf};
 }
 void handle_sprite_movement(Sprite *sprite) {
   float speed = sqrt(pow(sprite->velocity.x, 2) + pow(sprite->velocity.y, 2));
@@ -47,6 +52,19 @@ void handle_sprite_movement(Sprite *sprite) {
   sprite->w_pos.y += sprite->velocity.y;
 }
 Sprite player;
+Sprite enemies[MAX_ENEMY_NUMBER];
+Sprite *spawner;
+
+Vector2 get_random_w_pos(Vector2 lt, Vector2 rb) {
+  Vector2 result;
+  result.x = lt.x + rand() % (int)(rb.x - lt.x + 1);
+  result.y = rb.y + rand() % (int)(lt.y - rb.y + 1);
+  return result;
+}
+
+void spawn_zombie(Sprite *target, Image image) {
+  init_sprite(target, get_random_w_pos(), image, );
+}
 
 void handle_player_movement() {
   bool pressed = false;
@@ -75,6 +93,7 @@ void handle_player_movement() {
 
 int main() {
   // Initialize
+  srand((unsigned int)time(NULL));
   InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "TVSG");
   SetTraceLogLevel(LOG_WARNING);
   SetTargetFPS(60);
@@ -84,19 +103,20 @@ int main() {
     ImageResizeNN(&image_player[i], image_player[i].width * PLAYER_SCALE,
                   image_player[i].height * PLAYER_SCALE);
   }
-  init_sprite(&player, 0, 0, image_player[0], 3, 10, 0.8);
+  init_sprite(&player, (Vector2){0, 0}, image_player[0], 3, 10, 0.9);
   unload_sprite_texture(&player);
   w_camera_pos = (Vector2){0, 0};
 
   // Game loop
   while (!WindowShouldClose()) {
+
     handle_player_movement();
 
     player.texture =
         LoadTextureFromImage(image_player[(int)(GetTime() * 5) % 2 == 0]);
 
     BeginDrawing();
-    ClearBackground(WHITE);
+    ClearBackground(BLACK);
     draw_sprite(player);
     EndDrawing();
 
