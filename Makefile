@@ -4,6 +4,7 @@ mac:
     -L/opt/homebrew/lib \
 		-lraylib -lm \
 		main.c
+	./main
 
 linux:
 	gcc -Wall -Wextra -g -o main -lraylib -lm main.c

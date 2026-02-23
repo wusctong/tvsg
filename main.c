@@ -5,22 +5,30 @@
 #include <time.h>
 
 // Constants
-#define PLAYER_SCALE 4
+#define SPRITE_SCALE 2
 #define PLAYER_IMAGE_NUMBER 2
 #define MAX_ENEMY_NUMBER 5
-#define PLAYER_ACCEL 3
-#define PLAYER_
+#define PLAYER_ACCEL 2
+#define PLAYER_MAX_SPEED 7
+#define PLAYER_SDF 0.8
+#define ZOMBIE_ACCEL 0.8
+#define ZOMBIE_MAX_SPEED 2.5
+#define ZOMBIE_SDF 0.2
 
 // Core Variables
 int WINDOW_WIDTH = 800;
 int WINDOW_HEIGHT = 600;
 Vector2 w_camera_pos;
 
+// Core Functions
+float absf(float n) { return (n < 0) ? -n : n; }
+
 // Core Struct
 typedef struct Sprite {
   Vector2 w_pos, velocity;
   Texture texture;
   float acceleration, max_speed, slow_down_factor;
+  bool is_alive;
 } Sprite;
 void load_sprite_texture(Sprite *sprite, Image image) {
   sprite->texture = LoadTextureFromImage(image);
@@ -32,18 +40,22 @@ Vector2 get_sprite_s_pos(Sprite *sprite) {
   result.y = sprite->w_pos.y - w_camera_pos.y + WINDOW_HEIGHT / 2.0;
   return result;
 }
+float get_sprite_speed(Sprite *sprite) {
+  return sqrt(pow(sprite->velocity.x, 2) + pow(sprite->velocity.y, 2));
+}
 void draw_sprite(Sprite sprite) {
   Vector2 s_pos = get_sprite_s_pos(&sprite);
   DrawTexture(sprite.texture, s_pos.x - sprite.texture.width / 2.0,
               s_pos.y - sprite.texture.height / 2.0, WHITE);
 }
 void init_sprite(Sprite *sprite, Vector2 w_pos, Image image, float accel,
-                 float max_speed, float sdf) {
-  *sprite = (Sprite){w_pos, {0, 0},    LoadTextureFromImage(image),
-                     accel, max_speed, sdf};
+                 float max_speed, float sdf, bool is_alive) {
+  *sprite =
+      (Sprite){w_pos, {0, 0},  LoadTextureFromImage(image), accel, max_speed,
+               sdf,   is_alive};
 }
 void handle_sprite_movement(Sprite *sprite) {
-  float speed = sqrt(pow(sprite->velocity.x, 2) + pow(sprite->velocity.y, 2));
+  float speed = get_sprite_speed(sprite);
   if (speed > sprite->max_speed) {
     sprite->velocity.x *= sprite->max_speed / speed;
     sprite->velocity.y *= sprite->max_speed / speed;
@@ -58,12 +70,54 @@ Sprite *spawner;
 Vector2 get_random_w_pos(Vector2 lt, Vector2 rb) {
   Vector2 result;
   result.x = lt.x + rand() % (int)(rb.x - lt.x + 1);
-  result.y = rb.y + rand() % (int)(lt.y - rb.y + 1);
+  result.y = lt.y + rand() % (int)(rb.y - lt.y + 1);
   return result;
 }
 
 void spawn_zombie(Sprite *target, Image image) {
-  init_sprite(target, get_random_w_pos(), image, );
+  init_sprite(target,
+              get_random_w_pos((Vector2){-400, -300}, (Vector2){400, 300}),
+              image, ZOMBIE_ACCEL, ZOMBIE_MAX_SPEED, ZOMBIE_SDF, true);
+}
+void handle_zombie_spawn(Image image) {
+  for (int i = 0; i < MAX_ENEMY_NUMBER; i++) {
+    if (enemies[i].is_alive == false) {
+      spawn_zombie(&enemies[i], image);
+    }
+  }
+}
+void draw_zombie() {
+  for (int i = 0; i < MAX_ENEMY_NUMBER; i++)
+    if (enemies[i].is_alive)
+      draw_sprite(enemies[i]);
+}
+void handle_zombie_movement() {
+  for (int i = 0; i < MAX_ENEMY_NUMBER; i++) {
+    if (enemies[i].is_alive) {
+      float delta_x = player.w_pos.x - enemies[i].w_pos.x;
+      float delta_y = player.w_pos.y - enemies[i].w_pos.y;
+
+      if (absf(delta_x) < enemies[i].acceleration * 4) {
+        enemies[i].velocity.x *= enemies[i].slow_down_factor;
+      } else {
+        if (delta_x > 0) {
+          enemies[i].velocity.x += enemies[i].acceleration;
+        } else if (delta_x < 0) {
+          enemies[i].velocity.x -= enemies[i].acceleration;
+        }
+      }
+      if (absf(delta_y) < enemies[i].acceleration * 4) {
+        enemies[i].velocity.y *= enemies[i].slow_down_factor;
+      } else {
+        if (delta_y > 0) {
+          enemies[i].velocity.y += enemies[i].acceleration;
+        } else if (delta_y < 0) {
+          enemies[i].velocity.y -= enemies[i].acceleration;
+        }
+      }
+      handle_sprite_movement(&enemies[i]);
+    }
+  }
 }
 
 void handle_player_movement() {
@@ -97,26 +151,35 @@ int main() {
   InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "TVSG");
   SetTraceLogLevel(LOG_WARNING);
   SetTargetFPS(60);
+
+  Image image_zombie = LoadImage("./assets/zombie0.png");
+  ImageResizeNN(&image_zombie, image_zombie.width * SPRITE_SCALE,
+                image_zombie.height * SPRITE_SCALE);
+
   Image image_player[PLAYER_IMAGE_NUMBER];
   for (int i = 0; i < PLAYER_IMAGE_NUMBER; i++) {
     image_player[i] = LoadImage(TextFormat("./assets/player%d.png", i));
-    ImageResizeNN(&image_player[i], image_player[i].width * PLAYER_SCALE,
-                  image_player[i].height * PLAYER_SCALE);
+    ImageResizeNN(&image_player[i], image_player[i].width * SPRITE_SCALE,
+                  image_player[i].height * SPRITE_SCALE);
   }
-  init_sprite(&player, (Vector2){0, 0}, image_player[0], 3, 10, 0.9);
+  init_sprite(&player, (Vector2){0, 0}, image_player[0], PLAYER_ACCEL,
+              PLAYER_MAX_SPEED, PLAYER_SDF, true);
   unload_sprite_texture(&player);
+
   w_camera_pos = (Vector2){0, 0};
 
   // Game loop
   while (!WindowShouldClose()) {
-
+    handle_zombie_spawn(image_zombie);
     handle_player_movement();
+    handle_zombie_movement();
 
     player.texture =
         LoadTextureFromImage(image_player[(int)(GetTime() * 5) % 2 == 0]);
 
     BeginDrawing();
     ClearBackground(BLACK);
+    draw_zombie();
     draw_sprite(player);
     EndDrawing();
 
