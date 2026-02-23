@@ -6,14 +6,14 @@
 
 // Constants
 #define SPRITE_SCALE 2
-#define PLAYER_IMAGE_NUMBER 2
+#define PLAYER_IMAGE_NUMBER 30
 #define MAX_ENEMY_NUMBER 5
 #define PLAYER_ACCEL 2
 #define PLAYER_MAX_SPEED 7
 #define PLAYER_SDF 0.8
-#define ZOMBIE_ACCEL 0.8
-#define ZOMBIE_MAX_SPEED 2.5
-#define ZOMBIE_SDF 0.2
+#define ZOMBIE_ACCEL 1.5
+#define ZOMBIE_MAX_SPEED 4.5
+#define ZOMBIE_SDF 0.6
 
 // Core Variables
 int WINDOW_WIDTH = 800;
@@ -63,7 +63,7 @@ void handle_sprite_movement(Sprite *sprite) {
   sprite->w_pos.x += sprite->velocity.x;
   sprite->w_pos.y += sprite->velocity.y;
 }
-Sprite player;
+Sprite player, map;
 Sprite enemies[MAX_ENEMY_NUMBER];
 Sprite *spawner;
 
@@ -81,9 +81,14 @@ void spawn_zombie(Sprite *target, Image image) {
 }
 void handle_zombie_spawn(Image image) {
   for (int i = 0; i < MAX_ENEMY_NUMBER; i++) {
-    if (enemies[i].is_alive == false) {
+    if (!enemies[i].is_alive) {
       spawn_zombie(&enemies[i], image);
     }
+  }
+}
+void unload_zombie_texture() {
+  for (int i = 0; i < MAX_ENEMY_NUMBER; i++) {
+    unload_sprite_texture(&enemies[i]);
   }
 }
 void draw_zombie() {
@@ -145,6 +150,11 @@ void handle_player_movement() {
   handle_sprite_movement(&player);
 }
 
+void camera_follow(Sprite sprite) {
+  w_camera_pos.x = sprite.w_pos.x;
+  w_camera_pos.y = sprite.w_pos.y;
+}
+
 int main() {
   // Initialize
   srand((unsigned int)time(NULL));
@@ -155,7 +165,9 @@ int main() {
   Image image_zombie = LoadImage("./assets/zombie0.png");
   ImageResizeNN(&image_zombie, image_zombie.width * SPRITE_SCALE,
                 image_zombie.height * SPRITE_SCALE);
-
+  Image image_map = LoadImage("./assets/map0.png");
+  ImageResizeNN(&image_map, image_map.width * SPRITE_SCALE * 1.5,
+                image_map.height * SPRITE_SCALE * 1.5);
   Image image_player[PLAYER_IMAGE_NUMBER];
   for (int i = 0; i < PLAYER_IMAGE_NUMBER; i++) {
     image_player[i] = LoadImage(TextFormat("./assets/player%d.png", i));
@@ -164,21 +176,24 @@ int main() {
   }
   init_sprite(&player, (Vector2){0, 0}, image_player[0], PLAYER_ACCEL,
               PLAYER_MAX_SPEED, PLAYER_SDF, true);
+  init_sprite(&map, (Vector2){-512, -256}, image_map, 0, 0, 0, false);
   unload_sprite_texture(&player);
 
   w_camera_pos = (Vector2){0, 0};
 
   // Game loop
   while (!WindowShouldClose()) {
+    camera_follow(player);
     handle_zombie_spawn(image_zombie);
     handle_player_movement();
     handle_zombie_movement();
 
     player.texture =
-        LoadTextureFromImage(image_player[(int)(GetTime() * 5) % 2 == 0]);
+        LoadTextureFromImage(image_player[(int)(GetTime() * 30) % 30]);
 
     BeginDrawing();
     ClearBackground(BLACK);
+    draw_sprite(map);
     draw_zombie();
     draw_sprite(player);
     EndDrawing();
@@ -186,6 +201,11 @@ int main() {
     unload_sprite_texture(&player);
   }
 
+  unload_sprite_texture(&map);
+  unload_zombie_texture();
+
+  UnloadImage(image_map);
+  UnloadImage(image_zombie);
   for (int i = 0; i < PLAYER_IMAGE_NUMBER; i++) {
     UnloadImage(image_player[i]);
   }

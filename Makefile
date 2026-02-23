@@ -5,6 +5,7 @@ mac:
 		-lraylib -lm \
 		main.c
 	./main
+	rm -rf ./main.dSYM ./main ./DS_Store
 
 linux:
 	gcc -Wall -Wextra -g -o main -lraylib -lm main.c
