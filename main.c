@@ -202,7 +202,7 @@ int main() {
   Image image_zombie = LoadImage("./assets/zombie0.png");
   ImageResizeNN(&image_zombie, image_zombie.width * SPRITE_SCALE,
                 image_zombie.height * SPRITE_SCALE);
-  Image image_map = LoadImage("./assets/map0.png");
+  Image image_map = LoadImage("./assets/map1.png");
   ImageResizeNN(&image_map, image_map.width * SPRITE_SCALE * 1.5,
                 image_map.height * SPRITE_SCALE * 1.5);
   Image image_player[PLAYER_IMAGE_NUMBER];
