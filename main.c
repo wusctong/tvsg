@@ -10,9 +10,9 @@
 #define MAX_ENEMY_NUMBER 10
 #define PLAYER_ACCEL 2
 #define PLAYER_MAX_SPEED 7
-#define PLAYER_SDF 0.8
-#define ZOMBIE_ACCEL 1
-#define ZOMBIE_MAX_SPEED 3
+#define PLAYER_SDF 0.88
+#define ZOMBIE_ACCEL 0.75
+#define ZOMBIE_MAX_SPEED 1.5
 #define ZOMBIE_SDF 0.6
 
 // Core Variables
@@ -103,7 +103,7 @@ void spawn_zombie(Sprite *target, Image image) {
   init_sprite(target,
               get_random_w_pos((Vector2){-512, -256}, (Vector2){512, 256}),
               image, ZOMBIE_ACCEL, ZOMBIE_MAX_SPEED, ZOMBIE_SDF,
-              18 * SPRITE_SCALE, 18 * SPRITE_SCALE, true);
+              12 * SPRITE_SCALE, 12 * SPRITE_SCALE, true);
 }
 void handle_zombie_spawn(Image image) {
   for (int i = 0; i < MAX_ENEMY_NUMBER; i++) {
@@ -124,27 +124,37 @@ void draw_zombie() {
 void handle_zombie_movement() {
   for (int i = 0; i < MAX_ENEMY_NUMBER; i++) {
     if (enemies[i].is_alive) {
+      Vector2 delta_velocity = {0, 0};
       float delta_x = player.w_pos.x - enemies[i].w_pos.x;
       float delta_y = player.w_pos.y - enemies[i].w_pos.y;
-
       if (absf(delta_x) < enemies[i].acceleration * 4) {
         enemies[i].velocity.x *= enemies[i].slow_down_factor;
       } else {
         if (delta_x > 0) {
-          enemies[i].velocity.x += enemies[i].acceleration;
+          delta_velocity.x += enemies[i].acceleration;
         } else if (delta_x < 0) {
-          enemies[i].velocity.x -= enemies[i].acceleration;
+          delta_velocity.x -= enemies[i].acceleration;
         }
       }
       if (absf(delta_y) < enemies[i].acceleration * 4) {
         enemies[i].velocity.y *= enemies[i].slow_down_factor;
       } else {
         if (delta_y > 0) {
-          enemies[i].velocity.y += enemies[i].acceleration;
+          delta_velocity.y += enemies[i].acceleration;
         } else if (delta_y < 0) {
-          enemies[i].velocity.y -= enemies[i].acceleration;
+          delta_velocity.y -= enemies[i].acceleration;
         }
       }
+      for (int j = 0; j < MAX_ENEMY_NUMBER; j++) {
+        if (j == i)
+          continue;
+        if (check_sprite_collision(enemies[i], enemies[j])) {
+          delta_velocity.x -= (enemies[j].w_pos.x - enemies[i].w_pos.x) / 2;
+          delta_velocity.y -= (enemies[j].w_pos.y - enemies[i].w_pos.y) / 2;
+        }
+      }
+      enemies[i].velocity.x += delta_velocity.x;
+      enemies[i].velocity.y += delta_velocity.y;
       handle_sprite_movement(&enemies[i]);
     }
   }
@@ -234,12 +244,14 @@ int main() {
     draw_sprite(map);
     draw_zombie();
     draw_sprite(player);
+    /**
     for (int i = 0; i < MAX_ENEMY_NUMBER; i++) {
       draw_sprite_hitbox(enemies[i], BLUE);
     }
     draw_sprite_hitbox(player, RED);
+    **/
     DrawText(TextFormat("X: %f\nY: %f\n%s", player.w_pos.x, player.w_pos.y,
-                        (_bounded) ? "YES" : "NO"),
+                        (_bounded) ? "BOUNDED: YES" : "BOUNDED: NO"),
              10, 10, 20, WHITE);
     EndDrawing();
 
