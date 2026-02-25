@@ -21,7 +21,7 @@
 #define MAX_ENEMY_NUMBER 10
 #define PLAYER_ACCEL 2
 #define PLAYER_MAX_SPEED 7
-#define PLAYER_SDF 0.88
+#define PLAYER_SDF 0.9
 #define ZOMBIE_ACCEL 0.75
 #define ZOMBIE_MAX_SPEED 1.5
 #define ZOMBIE_SDF 0.6
@@ -29,6 +29,7 @@
 // Core Variables
 int WINDOW_WIDTH = 800;
 int WINDOW_HEIGHT = 600;
+unsigned long corpse_count = 0;
 Vector2 w_camera_pos;
 
 // Core Functions
@@ -159,7 +160,7 @@ typedef struct Particle {
 // Special Sprites
 Sprite player, map;
 Sprite enemies[MAX_ENEMY_NUMBER];
-Sprite *spawner;
+Sprite *corpses = NULL;
 
 // Zombie
 void spawn_zombie(Sprite *target, Image image) {
@@ -171,6 +172,12 @@ void spawn_zombie(Sprite *target, Image image) {
 void handle_zombie_spawn(Image image) {
   for (int i = 0; i < MAX_ENEMY_NUMBER; i++) {
     if (enemies[i].health <= 0) {
+      corpse_count++;
+      Sprite *temp = realloc(corpses, corpse_count * sizeof(Sprite));
+      if (temp == NULL)
+        free(corpses);
+      corpses = temp;
+      corpses[corpse_count - 1] = enemies[i];
       spawn_zombie(&enemies[i], image);
     }
   }
@@ -265,6 +272,8 @@ void player_weapon(Sprite *sprite) { sprite->health -= 1; }
 
 int main() {
   // Initialize
+  bool player_firing = false;
+
   srand((unsigned int)time(NULL));
   InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "TVSG");
   SetTraceLogLevel(LOG_WARNING);
@@ -282,6 +291,9 @@ int main() {
     ImageResizeNN(&image_player[i], image_player[i].width * SPRITE_SCALE,
                   image_player[i].height * SPRITE_SCALE);
   }
+  for (int i = 0; i < MAX_ENEMY_NUMBER; i++) {
+    spawn_zombie(&enemies[i], image_zombie);
+  }
   init_sprite(&player, (Vector2){0, 0}, image_player[0], PLAYER_ACCEL,
               PLAYER_MAX_SPEED, PLAYER_SDF, 12 * SPRITE_SCALE,
               18 * SPRITE_SCALE, 100, "player");
@@ -296,15 +308,25 @@ int main() {
   // Game loop
   while (!WindowShouldClose()) {
     camera_follow(player);
+
     handle_zombie_spawn(image_zombie);
+
     handle_player_movement();
     handle_zombie_movement();
+
+    if (IsKeyDown(KEY_SPACE)) {
+      player_firing = true;
+    } else {
+      player_firing = false;
+    }
+
     weapon.w_pos = player.w_pos;
 
-    for (int i = 0; i < MAX_ENEMY_NUMBER; i++) {
-      handle_trigger_behavior(weapon, &enemies[i], "enemy");
+    if (player_firing) {
+      for (int i = 0; i < MAX_ENEMY_NUMBER; i++) {
+        handle_trigger_behavior(weapon, &enemies[i], "enemy");
+      }
     }
-    handle_trigger_behavior(weapon, &player, "enemy");
 
     player.texture =
         LoadTextureFromImage(image_player[(int)(GetTime() * 30) % 30]);
@@ -312,11 +334,17 @@ int main() {
     BeginDrawing();
     ClearBackground(BLACK);
     draw_sprite(map);
+    if (corpses != NULL) {
+      for (unsigned long i = 0; i < corpse_count; i++) {
+        draw_sprite(*(corpses + i));
+      }
+    }
     draw_zombie();
     draw_sprite(player);
     DrawText(TextFormat("X: %f\nY: %f\nHEALTH: %d", player.w_pos.x,
                         player.w_pos.y, player.health),
              10, 10, 20, WHITE);
+    /*
     for (int i = 0; i < MAX_ENEMY_NUMBER; i++) {
       draw_sprite_hitbox(enemies[i], BLUE);
       DrawText(TextFormat("E%d %s: %d", i, enemies[i].tag, enemies[i].health),
@@ -324,6 +352,7 @@ int main() {
     }
     draw_sprite_hitbox(player, RED);
     draw_trigger_hitbox(weapon, GREEN);
+    */
     EndDrawing();
 
     unload_sprite_texture(&player);
