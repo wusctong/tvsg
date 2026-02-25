@@ -1,10 +1,21 @@
+/*
+ * TVSG
+ * a Top View Shooter Game written in C.
+ *
+ * author: wusctong
+ *
+ */
+
 #include "raylib.h"
 #include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 // Constants
+#define _MAX_TAG_STRING_LENGTH
+
 #define SPRITE_SCALE 3
 #define PLAYER_IMAGE_NUMBER 30
 #define MAX_ENEMY_NUMBER 10
@@ -16,8 +27,8 @@
 #define ZOMBIE_SDF 0.6
 
 // Core Variables
-int WINDOW_WIDTH = 1200;
-int WINDOW_HEIGHT = 900;
+int WINDOW_WIDTH = 800;
+int WINDOW_HEIGHT = 600;
 Vector2 w_camera_pos;
 
 // Core Functions
@@ -28,6 +39,19 @@ Vector2 get_random_w_pos(Vector2 lt, Vector2 rb) {
   result.y = lt.y + rand() % (int)(rb.y - lt.y + 1);
   return result;
 }
+Vector2 get_s_pos(Vector2 w_pos) {
+  Vector2 result;
+  result.x = w_pos.x - w_camera_pos.x + WINDOW_WIDTH / 2.0;
+  result.y = w_pos.y - w_camera_pos.y + WINDOW_HEIGHT / 2.0;
+  return result;
+}
+Rectangle get_hitbox(Vector2 w_pos, float hb_width, float hb_height) {
+  return (Rectangle){w_pos.x - hb_width / 2, w_pos.y - hb_height / 2, hb_width,
+                     hb_height};
+}
+float vel_to_speed(Vector2 velocity) {
+  return sqrt(pow(velocity.x, 2) + pow(velocity.y, 2));
+}
 
 // Core Struct
 typedef struct Sprite {
@@ -35,15 +59,24 @@ typedef struct Sprite {
   Texture texture;
   float acceleration, max_speed, slow_down_factor;
   float hb_width, hb_height;
-  bool is_alive;
+  long health;
+  char *tag;
 } Sprite;
 // .initialize
 void init_sprite(Sprite *sprite, Vector2 w_pos, Image image, float accel,
                  float max_speed, float sdf, float hb_width, float hb_height,
-                 bool is_alive) {
-  *sprite = (Sprite){w_pos,    {0, 0},    LoadTextureFromImage(image),
-                     accel,    max_speed, sdf,
-                     hb_width, hb_height, is_alive};
+                 long health, const char *tag) {
+  sprite->w_pos = w_pos;
+  sprite->velocity = (Vector2){0, 0};
+  sprite->texture = LoadTextureFromImage(image);
+  sprite->acceleration = accel;
+  sprite->max_speed = max_speed;
+  sprite->slow_down_factor = sdf;
+  sprite->hb_width = hb_width;
+  sprite->hb_height = hb_height;
+  sprite->health = health;
+  sprite->tag = malloc(strlen(tag) + 1);
+  strcpy(sprite->tag, tag);
 }
 // .texture
 void load_sprite_texture(Sprite *sprite, Image image) {
@@ -51,40 +84,36 @@ void load_sprite_texture(Sprite *sprite, Image image) {
 }
 void unload_sprite_texture(Sprite *sprite) { UnloadTexture(sprite->texture); }
 // .func
-Vector2 get_sprite_s_pos(Sprite sprite) {
-  Vector2 result;
-  result.x = sprite.w_pos.x - w_camera_pos.x + WINDOW_WIDTH / 2.0;
-  result.y = sprite.w_pos.y - w_camera_pos.y + WINDOW_HEIGHT / 2.0;
-  return result;
-}
-float get_sprite_speed(Sprite *sprite) {
-  return sqrt(pow(sprite->velocity.x, 2) + pow(sprite->velocity.y, 2));
-}
-Rectangle get_sprite_hitbox(Sprite sprite) {
-  return (Rectangle){sprite.w_pos.x - sprite.hb_width / 2,
-                     sprite.w_pos.y - sprite.hb_height / 2, sprite.hb_width,
-                     sprite.hb_height};
-}
 bool check_sprite_collision(Sprite a, Sprite b) {
-  Rectangle rect_a = get_sprite_hitbox(a);
-  Rectangle rect_b = get_sprite_hitbox(b);
+  Rectangle rect_a = get_hitbox(a.w_pos, a.hb_width, a.hb_height);
+  Rectangle rect_b = get_hitbox(b.w_pos, b.hb_width, b.hb_height);
   return CheckCollisionRecs(rect_a, rect_b);
 }
+void retag_sprite(Sprite *sprite, const char *tag) {
+  if (!strcmp(sprite->tag, tag)) {
+    strcpy(sprite->tag, tag);
+  }
+}
+/*void destroy_sprite(Sprite *sprite) {
+  unload_sprite_texture(sprite);
+  free(sprite);
+}*/
 // .draw
 void draw_sprite_hitbox(Sprite sprite, Color color) {
-  Rectangle hitbox = get_sprite_hitbox(sprite);
+  Rectangle hitbox =
+      get_hitbox(sprite.w_pos, sprite.hb_width, sprite.hb_height);
   DrawRectangleLines(hitbox.x - w_camera_pos.x + WINDOW_WIDTH / 2.0,
                      hitbox.y - w_camera_pos.y + WINDOW_HEIGHT / 2.0,
                      hitbox.width, hitbox.height, color);
 }
 void draw_sprite(Sprite sprite) {
-  Vector2 s_pos = get_sprite_s_pos(sprite);
+  Vector2 s_pos = get_s_pos(sprite.w_pos);
   DrawTexture(sprite.texture, s_pos.x - sprite.texture.width / 2.0,
               s_pos.y - sprite.texture.height / 2.0, WHITE);
 }
 // .movement
 void handle_sprite_movement(Sprite *sprite) {
-  float speed = get_sprite_speed(sprite);
+  float speed = vel_to_speed(sprite->velocity);
   if (speed > sprite->max_speed) {
     sprite->velocity.x *= sprite->max_speed / speed;
     sprite->velocity.y *= sprite->max_speed / speed;
@@ -92,6 +121,40 @@ void handle_sprite_movement(Sprite *sprite) {
   sprite->w_pos.x += sprite->velocity.x;
   sprite->w_pos.y += sprite->velocity.y;
 }
+
+typedef void (*func)(Sprite *sprite);
+typedef struct Trigger {
+  Vector2 w_pos;
+  float hb_width, hb_height;
+  func behavior;
+} Trigger;
+// .initialize
+void init_trigger(Trigger *trigger, Vector2 w_pos, float hb_width,
+                  float hb_height, func behavior) {
+  *trigger = (Trigger){w_pos, hb_width, hb_height, behavior};
+}
+// .func
+bool check_trigger_collision(Trigger a, Sprite b) {
+  Rectangle rect_a = get_hitbox(a.w_pos, a.hb_width, a.hb_height);
+  Rectangle rect_b = get_hitbox(b.w_pos, b.hb_width, b.hb_height);
+  return CheckCollisionRecs(rect_a, rect_b);
+}
+void handle_trigger_behavior(Trigger a, Sprite *b, const char *tag) {
+  if (check_trigger_collision(a, *b) && !strcmp(b->tag, tag)) {
+    a.behavior(b);
+  }
+}
+// .draw
+void draw_trigger_hitbox(Trigger trigger, Color color) {
+  Rectangle hitbox =
+      get_hitbox(trigger.w_pos, trigger.hb_width, trigger.hb_height);
+  DrawRectangleLines(hitbox.x - w_camera_pos.x + WINDOW_WIDTH / 2.0,
+                     hitbox.y - w_camera_pos.y + WINDOW_HEIGHT / 2.0,
+                     hitbox.width, hitbox.height, color);
+}
+
+typedef struct Particle {
+} Particle;
 
 // Special Sprites
 Sprite player, map;
@@ -103,11 +166,11 @@ void spawn_zombie(Sprite *target, Image image) {
   init_sprite(target,
               get_random_w_pos((Vector2){-512, -256}, (Vector2){512, 256}),
               image, ZOMBIE_ACCEL, ZOMBIE_MAX_SPEED, ZOMBIE_SDF,
-              12 * SPRITE_SCALE, 12 * SPRITE_SCALE, true);
+              12 * SPRITE_SCALE, 12 * SPRITE_SCALE, 40, "enemy");
 }
 void handle_zombie_spawn(Image image) {
   for (int i = 0; i < MAX_ENEMY_NUMBER; i++) {
-    if (!enemies[i].is_alive) {
+    if (enemies[i].health <= 0) {
       spawn_zombie(&enemies[i], image);
     }
   }
@@ -116,14 +179,19 @@ void unload_zombie_texture() {
   for (int i = 0; i < MAX_ENEMY_NUMBER; i++)
     unload_sprite_texture(&enemies[i]);
 }
+/*void destroy_zombie() {
+  for (int i = 0; i < MAX_ENEMY_NUMBER; i++) {
+    destroy_sprite(&enemies[i]);
+  }
+}*/
 void draw_zombie() {
   for (int i = 0; i < MAX_ENEMY_NUMBER; i++)
-    if (enemies[i].is_alive)
+    if (enemies[i].health > 0)
       draw_sprite(enemies[i]);
 }
 void handle_zombie_movement() {
   for (int i = 0; i < MAX_ENEMY_NUMBER; i++) {
-    if (enemies[i].is_alive) {
+    if (enemies[i].health > 0) {
       Vector2 delta_velocity = {0, 0};
       float delta_x = player.w_pos.x - enemies[i].w_pos.x;
       float delta_y = player.w_pos.y - enemies[i].w_pos.y;
@@ -192,6 +260,9 @@ void camera_follow(Sprite sprite) {
   w_camera_pos.y = sprite.w_pos.y;
 }
 
+// Trigger Special Funcs
+void player_weapon(Sprite *sprite) { sprite->health -= 1; }
+
 int main() {
   // Initialize
   srand((unsigned int)time(NULL));
@@ -213,13 +284,14 @@ int main() {
   }
   init_sprite(&player, (Vector2){0, 0}, image_player[0], PLAYER_ACCEL,
               PLAYER_MAX_SPEED, PLAYER_SDF, 12 * SPRITE_SCALE,
-              18 * SPRITE_SCALE, true);
-  init_sprite(&map, (Vector2){0, 0}, image_map, 0, 0, 0, 0, 0, false);
+              18 * SPRITE_SCALE, 100, "player");
+  init_sprite(&map, (Vector2){0, 0}, image_map, 0, 0, 0, 0, 0, 100, "map");
   unload_sprite_texture(&player);
-
   w_camera_pos = (Vector2){0, 0};
 
-  bool _bounded;
+  Trigger weapon;
+  init_trigger(&weapon, player.w_pos, 16 * SPRITE_SCALE, 16 * SPRITE_SCALE,
+               player_weapon);
 
   // Game loop
   while (!WindowShouldClose()) {
@@ -227,14 +299,12 @@ int main() {
     handle_zombie_spawn(image_zombie);
     handle_player_movement();
     handle_zombie_movement();
+    weapon.w_pos = player.w_pos;
 
-    _bounded = false;
     for (int i = 0; i < MAX_ENEMY_NUMBER; i++) {
-      if (check_sprite_collision(player, enemies[i])) {
-        _bounded = true;
-        break;
-      }
+      handle_trigger_behavior(weapon, &enemies[i], "enemy");
     }
+    handle_trigger_behavior(weapon, &player, "enemy");
 
     player.texture =
         LoadTextureFromImage(image_player[(int)(GetTime() * 30) % 30]);
@@ -244,20 +314,23 @@ int main() {
     draw_sprite(map);
     draw_zombie();
     draw_sprite(player);
-    /**
+    DrawText(TextFormat("X: %f\nY: %f\nHEALTH: %d", player.w_pos.x,
+                        player.w_pos.y, player.health),
+             10, 10, 20, WHITE);
     for (int i = 0; i < MAX_ENEMY_NUMBER; i++) {
       draw_sprite_hitbox(enemies[i], BLUE);
+      DrawText(TextFormat("E%d %s: %d", i, enemies[i].tag, enemies[i].health),
+               10, 150 + 20 * i, 20, WHITE);
     }
     draw_sprite_hitbox(player, RED);
-    **/
-    DrawText(TextFormat("X: %f\nY: %f\n%s", player.w_pos.x, player.w_pos.y,
-                        (_bounded) ? "BOUNDED: YES" : "BOUNDED: NO"),
-             10, 10, 20, WHITE);
+    draw_trigger_hitbox(weapon, GREEN);
     EndDrawing();
 
     unload_sprite_texture(&player);
   }
 
+  // destroy_sprite(&player);
+  // destroy_sprite(&map);
   unload_sprite_texture(&map);
   unload_zombie_texture();
 

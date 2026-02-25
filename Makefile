@@ -1,4 +1,4 @@
-mac:
+unix:
 	gcc -Wall -Wextra -g -o main \
 		-I/opt/homebrew/include \
     -L/opt/homebrew/lib \
@@ -7,10 +7,10 @@ mac:
 	./main
 	rm -rf ./main.dSYM ./main ./DS_Store
 
-linux:
-	gcc -Wall -Wextra -g -o main -lraylib -lm main.c
-	./main
-
 win:
-	x86_64-w64-mingw32-gcc -Wall -Wextra -g -o main -lraylib -lm main.c
-	./main
+	x86_64-w64-mingw32-gcc -Wall -Wextra -g -o main \
+		-I../env/win64/include \
+	  -L../env/win64/lib \
+		-lraylib -lm \
+		main.c
+	./main.exe
